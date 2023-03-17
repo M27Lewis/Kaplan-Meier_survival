@@ -1,0 +1,4 @@
+## Ignore all files/folders in METABRIC_cBioPortal
+*
+!README.md
+!.gitignore
