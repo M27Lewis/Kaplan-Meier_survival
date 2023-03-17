@@ -1,4 +1,10 @@
-## Ignore everything except raw
+## Ignore everyting
 *
-!raw/*
+
+# But not gitignore
 !.gitignore
+!README.md
+
+!/raw
+!/METABRIC_cBioPortal
+
