@@ -1,4 +1,0 @@
-## Ignore all files/folders in raw
-*
-!METABRIC_cBioPortal/*
-!.gitignore
