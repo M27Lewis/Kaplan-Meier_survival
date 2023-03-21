@@ -91,3 +91,7 @@ kmPlot<-function(x,
   }	
 }
 
+gene_path <- "data/"
+
+genes <- read.delim(gene_path, header = TRUE, sep = "\t")
+
