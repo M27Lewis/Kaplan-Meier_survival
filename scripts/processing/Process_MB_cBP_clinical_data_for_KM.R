@@ -21,5 +21,5 @@ MB_clin_data <- MB_clin_data |>
   mutate_all(~na_if(., '')) |> #Recode empty values as NAs
   na.omit()
   
-
-
+# Export processed data as RDS file
+saveRDS(MB_clin_data, "data/METABRIC_cBioPortal/METABRIC_cBioPortal_clinical_data_processed.rds")

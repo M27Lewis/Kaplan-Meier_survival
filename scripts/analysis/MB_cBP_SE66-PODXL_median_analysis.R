@@ -5,7 +5,7 @@ library(writexl)
 library(GSVA)
 library(survival)
 library(rms)
-library(tidylog)
+
 Surv<- survival::Surv
 
 ###########################################################
@@ -91,6 +91,24 @@ kmPlot<-function(x,
   }	
 }
 
+#####################################
+
+#Import datasets for analysis
+mb_cbp_z <- readRDS("data/METABRIC_cBioPortal/METABRIC_cBioPortal_z-scored_data.rds")
+
+mb_cbp_clin <- readRDS("data/METABRIC_cBioPortal/METABRIC_cBioPortal_clinical_data_processed.rds")
+
+#Modify datasets to ensure matching patient IDs
+ids <- unique(mb_cbp_clin$PATIENT_ID)
+
+ids2 <- unique(colnames(mb_cbp_z))
+
+c(setdiff(ids2, ids), setdiff(ids, ids2)) 
+
+mb_cbp_z <- mb_cbp_z |> 
+  select(!"MB-5130") #Removing this ID since it does not appear in clinical data (might have NAs)
+
+#Import gene lists for analysis
 gene_path <- "data/"
 
 genes <- read.delim(gene_path, header = TRUE, sep = "\t")
