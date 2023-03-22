@@ -146,15 +146,21 @@ results[,1:(ncol(results)-1)] <- scale(results[,1:(ncol(results)-1)]) #Standardi
 
 x <- merge(mb_cbp_clin, results, by = "PATIENT_ID")
 
+
+#Adjust survival data to correct class and cap at 10 years of survival data
 x$OS_MONTHS <- as.numeric(x$OS_MONTHS) #convert column to numeric
 
 x$OS_MONTHS <- x$OS_MONTHS / 12
 
-x$OS_MONTHS <- ifelse(x$OS_MONTHS >= 10, 10, x$OS_MONTHS)
 
 x$OS_STATUS <- gsub("\\:.*", "", x$OS_STATUS) #remove the colon and everything after
 
 x$OS_STATUS <- as.numeric(x$OS_STATUS) #convert to numeric
+
+x$OS_MONTHS <- ifelse(x$OS_MONTHS >= 10, 10, x$OS_MONTHS) #cap survival time at 10 years
+
+x <- x |> 
+  mutate(OS_STATUS = ifelse(OS_MONTHS == 10 & OS_STATUS == 1, 0, OS_STATUS))
 
 
 
