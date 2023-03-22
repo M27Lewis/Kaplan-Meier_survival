@@ -5,6 +5,7 @@
 !.gitignore
 !README.md
 
+# Or my data directories
 !/raw
 !/METABRIC_cBioPortal
-
+!/gene_signatures
