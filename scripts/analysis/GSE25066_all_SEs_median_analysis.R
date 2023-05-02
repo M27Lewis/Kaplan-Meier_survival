@@ -5,6 +5,7 @@ library(writexl)
 library(GSVA)
 library(survival)
 library(rms)
+library('org.Hs.eg.db')
 
 Surv<- survival::Surv
 
@@ -93,20 +94,58 @@ kmPlot<-function(x,
 
 #####################################
 
-#Import datasets for analysis
-mb_cbp_z <- readRDS("data/METABRIC_cBioPortal/METABRIC_cBioPortal_z-scored_data.rds")
+# Custom ggplot theme
+theme_Publication <- function(base_size=14, base_family="sans") {
+  library(grid)
+  library(ggthemes)
+  (theme_foundation(base_size=base_size, base_family=base_family)
+    + theme(plot.title = element_text(face = "bold",
+                                      size = rel(1.2), hjust = 0.5, margin = margin(b = 5)),
+            text = element_text(),
+            panel.background = element_blank(),
+            plot.background = element_blank(),
+            panel.border = element_rect(colour = NA),
+            axis.title = element_text(face = "bold",size = rel(1)),
+            axis.title.y = element_text(angle=90,vjust =2),
+            axis.title.x = element_text(vjust = -0.2),
+            axis.text = element_text(), 
+            axis.line = element_line(colour="black"),
+            axis.ticks = element_line(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            legend.key = element_rect(colour = NA),
+            legend.position = "bottom",
+            legend.direction = "horizontal",
+            legend.key.size= unit(0.2, "cm"),
+            legend.margin = margin(0, 0, 0, 0),
+            legend.title = element_text(),
+            plot.margin=unit(c(10,5,5,5),"mm"),
+            strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+            strip.text = element_text(face="bold")
+    ))
+  
+}
+##############################
 
-mb_cbp_clin <- readRDS("data/METABRIC_cBioPortal/METABRIC_cBioPortal_clinical_data_processed.rds")
 
-#Modify datasets to ensure matching patient IDs
-ids <- unique(mb_cbp_clin$PATIENT_ID) #clinical patient IDs
+# Import datasets for analysis
+MD <- readRDS("data/GSE25066/MDACC_Clinical_Expression_data.rds")
 
-ids2 <- unique(colnames(mb_cbp_z)) #expression patient IDs
+MDF <- MD |> 
+  dplyr::slice(46:n()) |> #Remove first 44 rows
+  filter(!grepl("///", CLID)) |> #Remove lines with multiple probe hits
+  mutate_all(function(x) as.numeric(as.character(x))) #Convert all to numeric
 
-c(setdiff(ids2, ids), setdiff(ids, ids2)) #patient ID(s) that do not appear in both datasets
+rownames(MDF) <- MDF$CLID
 
-mb_cbp_z <- mb_cbp_z |> 
-  select(!"MB-5130") #Removing this ID since it does not appear in clinical data (might have NAs)
+MDF <- MDF[,-1] #Remove CLID Row containing Entrez IDs
+
+#Importing the reduced survival data from Chris to append my gsva SE signature scores to
+MDA_data <- read.delim("data/GSE25066/survival_data_CF.txt", sep="\t",header=T)
+
+#Remove punctuation to make CLIDs match
+MDA_data$CLID <- gsub('[[:punct:]]','', MDA_data$CLID)
+
 
 #Import gene lists and prepare for analysis
 gene_path <- "data/gene_signatures/SE_DEGs_clean.txt" #complete list of DEGs from CRISPRi Screen 2.0 experiment
@@ -114,71 +153,51 @@ gene_path <- "data/gene_signatures/SE_DEGs_clean.txt" #complete list of DEGs fro
 genes <- read.delim(gene_path, header = TRUE, sep = "\t") |> 
   dplyr::rename("cohort" = "SE") |> 
   dplyr::rename("gene" = "X") |> 
-  filter(cohort %in% c("SE66", "SE6")) |>  #filter to only SE66 and SE6 DEGs
-  filter(baseMean > quantile(baseMean, 0.05)) |>  #remove bottom 5% of genes by expression
+  filter(!cohort %in% c("CSF1", "CSF1e")) |>  #filter to remove positive controls
+  filter(baseMean > 10) |>  #remove genes with basemean expression < 10 (same as RNA-seq analysis)
   filter(log2FoldChange < 0) |> #remove genes that increase in expression when SE is knocked down
-  filter(padj < 0.05) #only DEG pval < 0.05
+  filter(padj < 0.05) #only DEG adj pval < 0.05
 
-#Iterate through gene list to assign median score for each patient
+
+#For loop to iterate through signature list and find medians
 cohort_list <- unique(genes$cohort)
 
 results <- as.data.frame(matrix(
   ncol = length(unique(genes$cohort)), 
-  nrow = nrow(mb_cbp_clin))) #build empty df for results, # of rows matches # of patients, # of columns matches # of cohorts
+  nrow = ncol(MDF))) #build empty df for results, # of rows matches # of patients, # of columns matches # of cohorts
 
 colnames(results) <- cohort_list #Assign SE names to the column names of results DF
 
-results$PATIENT_ID <- colnames(mb_cbp_z) #Create CLID column to keep track of patient IDs
+results$CLID <- colnames(MDF) #Create CLID column to keep track of patient IDs
 
+genes$Entrez <- mapIds(org.Hs.eg.db, genes$gene, 'ENTREZID', 'SYMBOL') #Create a column with the Entrez ID that matches each gene (for appending survival data later)
 
 
 for (i in 1:length(cohort_list)){
   gene_list <- genes |> 
-    filter(cohort == cohort_list[i]) #subset to rows that contain genes listed in the [i] group
-  surv_data <- as.data.frame(t(mb_cbp_z |> 
-                                 filter(rownames(mb_cbp_z) %in% gene_list$gene))) 
+    filter(cohort == cohort_list[i])
+  surv_data <- as.data.frame(t(MDF |> 
+                                 filter(rownames(MDF) %in% gene_list$Entrez)))
   
   results[,i] <- apply(surv_data, 1, median)
   
 }
 
-results[,1:(ncol(results)-1)] <- scale(results[,1:(ncol(results)-1)]) #Standardize the median results by column (mean=0, sd=1), but skip PATIENT_ID column
+results[,1:(ncol(results)-1)] <- scale(results[,1:(ncol(results)-1)]) #Standardize the median results by column (mean=0, sd=1), but skip CLID column
 
-x <- merge(mb_cbp_clin, results, by = "PATIENT_ID")
+results$CLID <- gsub('[[:punct:]]','', results$CLID)
 
-
-#Adjust survival data to correct class and cap at 10 years of survival data
-x$OS_MONTHS <- as.numeric(x$OS_MONTHS) #convert column to numeric
-
-x$OS_MONTHS <- x$OS_MONTHS / 12
+x <- merge(MDA_data, results, by = "CLID")
 
 
-x$OS_STATUS <- gsub("\\:.*", "", x$OS_STATUS) #remove the colon and everything after
+# Create and save KM plots
+this.name="All_SEs_GSE25066_padj_0.05"
+par(mgp=c(1.3,.35,.0),mai=c(.5,.5,.4,.2))
+pdf(paste("plots/", this.name, "_Median_scaled_in_MDACC_DRFS_KM.pdf",sep=""), width=12, height=7)
 
-x$OS_STATUS <- as.numeric(x$OS_STATUS) #convert to numeric
-
-x$OS_MONTHS <- ifelse(x$OS_MONTHS >= 10, 10, x$OS_MONTHS) #cap survival time at 10 years
-
-x <- x |> 
-  mutate(OS_STATUS = ifelse(OS_MONTHS == 10 & OS_STATUS == 1, 0, OS_STATUS))
-
-
-
-#Run KM analysis and save plots
-this.name="SE66_SE6_padj_05"
-pdf(paste("plots/", Sys.Date(), "_", this.name, "_Median_scaled_in_METABRIC_cBioPortal_OS_KM.pdf",sep=""), width=12, height=7) #Default is W = 12 and H = 7 for larger PDFs
-par(mgp=c(1.3,.35,.0),mai=c(.5,.5,.4,.2),mfrow=c(1,2))
-
-
-
-for(i in 8:dim(x)[2])
+par(mfrow=c(1,2))
+for (i in 8:dim(x)[2])
 {
-  x<-subset(x,x[,3]!="NA") #removing NAs from the survival column
-  dim(x)
-  x<-subset(x,x[,2]!="#VALUE!") #removing non-numeric values from survival time
-  dim(x)
-  x<-subset(x,x[,i]!="NA") #removing any general NAs
-  dim(x)
   
   quantile.00<-as.numeric(quantile(x[,i], 0.00))
   quantile.25<-as.numeric(quantile(x[,i], 0.25))
@@ -188,23 +207,23 @@ for(i in 8:dim(x)[2])
   quantile.75<-as.numeric(quantile(x[,i], 0.75))
   quantile.100<-as.numeric(quantile(x[,i], 0.100))
   
-  #Cutting the data by quantile, with the 1000s being the outer boundaries that will never be reached
+  
   G.2<- cut(x[,i],c(-1000,quantile.50,1000),c("low","high"))
   G.2<- cut(x[,i],c(-1000,quantile.50,1000),c("low","high"))
   G.3<- cut(x[,i],c(-1000,quantile.33,quantile.66,1000),c("low","med","high"))
   G.4<- cut(x[,i],c(-1000,quantile.25,quantile.50,quantile.75,1000),c("low","med.low","med.high","high"))
   
   kmPlot(G.2, 
-         x$OS_STATUS, 
-         x$OS_MONTHS, 
-         ylab="OS (Probability)",
+         x$drfs1event0censored, 
+         x$drfseventimeyears, 
+         ylab="DRFS (Probability)",
          xlab="Years",
          lwid=1,
          lineColors=c("green","red"), 
          varName=names(x)[i])
   
-  cindex<- signif(1-rcorr.cens(x[,i],Surv(x$OS_MONTHS, x$OS_STATUS))[[1]],3)	
-  fit<-summary(coxph(Surv(x$OS_MONTHS, x$OS_STATUS)~x[,i]))	
+  cindex<- signif(1-rcorr.cens(x[,i],Surv(x$drfseventimeyears, x$drfs1event0censored))[[1]],3)	
+  fit<-summary(coxph(Surv(x$drfseventimeyears, x$drfs1event0censored)~x[,i]))	
   if(fit$coef[,5]<0.05)
   {
     legend("topright",legend=paste("Cox HR = ",signif(fit$coef[,2],4), "\n95% CI (", signif(fit$conf.int[,3],3), ", ", signif(fit$conf.int[,4],3), ")", "\nCox P = ", signif(fit$coef[,5],3),"\nC-index = ",cindex), bty="n", text.col="red")	
@@ -214,16 +233,16 @@ for(i in 8:dim(x)[2])
   }
   
   kmPlot(G.3, 
-         x$OS_STATUS, 
-         x$OS_MONTHS, 
-         ylab="OS (Probability)",
+         x$drfs1event0censored, 
+         x$drfseventimeyears, 
+         ylab="DRFS (Probability)",
          xlab="Years",
          lwid=1,
          lineColors=c("green","blue","red"), 
          varName=names(x)[i])
   
-  cindex<- signif(1-rcorr.cens(x[,i],Surv(x$OS_MONTHS, x$OS_STATUS))[[1]],3)	
-  fit<-summary(coxph(Surv(x$OS_MONTHS, x$OS_STATUS)~x[,i]))	
+  cindex<- signif(1-rcorr.cens(x[,i],Surv(x$drfseventimeyears, x$drfs1event0censored))[[1]],3)	
+  fit<-summary(coxph(Surv(x$drfseventimeyears, x$drfs1event0censored)~x[,i]))	
   #legend("topright",legend=paste("C-index = ",cindex,  "\nCox HR = ",signif(fit$coef[,2],4), "\nCox p = ", signif(fit$coef[,5],3)), bty="n")	
   
   if(fit$coef[,5]<0.05)
@@ -233,8 +252,8 @@ for(i in 8:dim(x)[2])
   {
     legend("topright",legend=paste("Cox HR = ",signif(fit$coef[,2],4), "\n95% CI (", signif(fit$conf.int[,3],3), ", ", signif(fit$conf.int[,4],3), ")", "\nCox P = ", signif(fit$coef[,5],3),"\nC-index = ",cindex), bty="n")	
   }
+  
 }
 
+
 dev.off()
-
-
