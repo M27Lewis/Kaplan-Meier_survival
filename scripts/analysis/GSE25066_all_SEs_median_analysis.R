@@ -257,3 +257,39 @@ for (i in 8:dim(x)[2])
 
 
 dev.off()
+
+# Calculate hazard ratios and write to table
+HR_df <- setNames(data.frame(matrix(ncol = 5, nrow = 0)), c("SE", "Cox_hazard_ratio", "95CI_min", "95CI_max", "Cox_p"))
+
+for (i in 8:dim(x)[2])
+{
+  fit<-summary(coxph(Surv(x$drfseventimeyears, x$drfs1event0censored)~x[,i]))
+  
+  HR_df[i-7, "SE"] <- colnames(x[i])
+  HR_df[i-7,"Cox_hazard_ratio"] <- signif(fit$coef[,2],4)
+  HR_df[i-7,"95CI_min"] <- signif(fit$conf.int[,3],3)
+  HR_df[i-7,"95CI_max"] <- signif(fit$conf.int[,4],3)
+  HR_df[i-7,"Cox_p"] <- signif(fit$coef[,5],3)
+  
+}
+
+write_tsv(as.data.frame(HR_df), "tables/Cox_hazard_ratio_results_all_SEs_GSE25066.txt")
+
+# Create forest plot of hazard ratios
+HR_df$SE <- factor(HR_df$SE, levels = HR_df$SE[order(HR_df$Cox_hazard_ratio)]) #Reorder so that largest HR is on top and goes in descending order
+
+fp1 <- ggplot(HR_df, mapping = aes(x = Cox_hazard_ratio, y = SE)) +
+  geom_point(colour = "black", shape = 10, size = 4) + #Selecting point color, shape, and size
+  geom_errorbarh(aes(xmin = `95CI_min`, xmax = `95CI_max`), height = 0.5) + #Creates the lower and upper bars
+  geom_vline(xintercept = 1, linetype = "dashed") + #Adds intercept line at HR = 1
+  geom_text(aes(x = (min(`95CI_min`) - 0.5), label = Cox_p), size = 3) + #Prints the cox pval on the plot to the left of the smallest value
+  scale_x_continuous(expand = expansion(mult = .2)) + #Auto scales the plot size with a 10% buffer
+  labs(x = 'Hazard Ratio', y = '') + #Setting the X and Y labels
+  theme(legend.position = 'none') + #Removing the legend
+  theme_Publication()
+
+fp1
+
+
+ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.pdf", plot = fp1, width = 6, height = 5.5, units = "in", dpi = 600)
+ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.png", plot = fp1, width = 6, height = 5.5, units = "in", dpi = 600)
