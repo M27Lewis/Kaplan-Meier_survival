@@ -282,7 +282,7 @@ fp1 <- ggplot(HR_df, mapping = aes(x = Cox_hazard_ratio, y = SE)) +
   geom_point(colour = "black", shape = 10, size = 4) + #Selecting point color, shape, and size
   geom_errorbarh(aes(xmin = `95CI_min`, xmax = `95CI_max`), height = 0.5) + #Creates the lower and upper bars
   geom_vline(xintercept = 1, linetype = "dashed") + #Adds intercept line at HR = 1
-  geom_text(aes(x = (min(`95CI_min`) - 0.5), label = Cox_p), size = 3) + #Prints the cox pval on the plot to the left of the smallest value
+  geom_text(aes(x = (min(`95CI_min`) - 0.25), label = Cox_p), size = 4) + #Prints the cox pval on the plot to the left of the smallest value
   scale_x_continuous(expand = expansion(mult = .2)) + #Auto scales the plot size with a 10% buffer
   labs(x = 'Hazard Ratio', y = '') + #Setting the X and Y labels
   theme(legend.position = 'none') + #Removing the legend
@@ -291,5 +291,5 @@ fp1 <- ggplot(HR_df, mapping = aes(x = Cox_hazard_ratio, y = SE)) +
 fp1
 
 
-ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.pdf", plot = fp1, width = 6, height = 5.5, units = "in", dpi = 600)
-ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.png", plot = fp1, width = 6, height = 5.5, units = "in", dpi = 600)
+ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.pdf", plot = fp1, width = 8, height = 5, units = "in", dpi = 600)
+ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.png", plot = fp1, width = 8, height = 5, units = "in", dpi = 600)
