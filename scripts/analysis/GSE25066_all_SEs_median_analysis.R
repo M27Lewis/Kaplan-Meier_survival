@@ -291,5 +291,5 @@ fp1 <- ggplot(HR_df, mapping = aes(x = Cox_hazard_ratio, y = SE)) +
 fp1
 
 
-ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.pdf", plot = fp1, width = 8, height = 5, units = "in", dpi = 600)
+ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.pdf", plot = fp1, width = 5, height = 3.75, units = "in", dpi = 600)
 ggsave("plots/All_SEs_padj_0.05_Forest_plot_GSE25066.png", plot = fp1, width = 8, height = 5, units = "in", dpi = 600)
